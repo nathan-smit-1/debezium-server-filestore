@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.debezium</groupId>
+    <artifactId>debezium-server-filestore</artifactId>
+    <version>${revision}</version>
+    <packaging>pom</packaging>
+
+    <name>Debezium Server FileStore Parent</name>
+    <description>Debezium Server distribution with FileStore sink support</description>
+
+    <properties>
+        <revision>3.2.1.Final</revision>
+        <debezium.version>3.2.1.Final</debezium.version>
+        <quarkus.version>3.2.2.Final</quarkus.version>
+        <quarkus.version.runtime>3.2.2.Final</quarkus.version.runtime>
+        <compiler.plugin.version>3.11.0</compiler.plugin.version>
+        <version.assembly.plugin>3.5.0</version.assembly.plugin>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.release>17</maven.compiler.release>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <version.enforcer.plugin>3.3.0</version.enforcer.plugin>
+        <version.shade.plugin>3.5.0</version.shade.plugin>
+        <version.jar.plugin>3.3.0</version.jar.plugin>
+        <version.assertj>3.24.2</version.assertj>
+        <version.awaitility>4.2.0</version.awaitility>
+    </properties>
+
+    <modules>
+        <module>debezium-server-filestore-sink</module>
+        <module>debezium-server-filestore-dist</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.debezium</groupId>
+                <artifactId>debezium-server-bom</artifactId>
+                <version>${debezium.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Explicit dependency management for test dependencies -->
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>${version.assertj}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.awaitility</groupId>
+                <artifactId>awaitility</artifactId>
+                <version>${version.awaitility}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${compiler.plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${version.enforcer.plugin}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-maven</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>3.6.3</version>
+                                </requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

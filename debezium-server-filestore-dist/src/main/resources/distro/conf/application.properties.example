@@ -1,0 +1,98 @@
+# Debezium Server FileStore Example Configuration
+#
+# This is an example configuration for Debezium Server with FileStore sink.
+# Copy this file to application.properties and customize for your environment.
+
+# =============================================================================
+# Source Database Configuration (MySQL)
+# =============================================================================
+debezium.source.connector.class=io.debezium.connector.mysql.MySqlConnector
+debezium.source.topic.prefix=myapp
+debezium.source.database.hostname=localhost
+debezium.source.database.port=3306
+debezium.source.database.user=debezium_user
+debezium.source.database.password=debezium_password
+debezium.source.database.server.name=myapp
+debezium.source.database.server.id=12345
+debezium.source.database.allowPublicKeyRetrieval=true
+debezium.source.database.history.skip.unparseable.ddl=true
+
+# Table filtering
+debezium.source.table.include.list=myschema.customers,myschema.orders
+
+# =============================================================================
+# Data Format Configuration
+# =============================================================================
+debezium.source.value.converter=org.apache.kafka.connect.json.JsonConverter
+debezium.source.value.converter.schemas.enable=false
+debezium.format.key=json
+debezium.format.value=json
+debezium.source.decimal.handling.mode=double
+
+# =============================================================================
+# Transformations Configuration
+# =============================================================================
+debezium.transforms=unwrap,reroute
+debezium.transforms.unwrap.type=io.debezium.transforms.ExtractNewRecordState
+debezium.transforms.unwrap.delete.tombstone.handling.mode=rewrite
+debezium.transforms.unwrap.add.headers=op
+
+debezium.transforms.reroute.type=io.debezium.transforms.ByLogicalTableRouter
+debezium.transforms.reroute.topic.regex=myapp
+debezium.transforms.reroute.topic.replacement=myapp-data
+
+# =============================================================================
+# FileStore Sink Configuration
+# =============================================================================
+debezium.sink.type=filestore
+debezium.sink.filestore.directory=data
+debezium.sink.filestore.header.filter.name=__op
+debezium.sink.filestore.header.filter.value=r
+debezium.sink.filestore.pass.through.sink=pubsub
+debezium.sink.filestore.batch.size=1000
+debezium.sink.filestore.flush.interval.ms=1000
+
+# =============================================================================
+# PubSub Pass-through Configuration (commented out by default)
+# =============================================================================
+#debezium.sink.type=pubsub
+debezium.sink.pubsub.project.id=my-gcp-project
+debezium.sink.pubsub.ordering.enabled=false
+debezium.sink.pubsub.flowcontrol.enabled=false
+debezium.sink.pubsub.batch.delay.threshold.ms=1000
+debezium.sink.pubsub.batch.element.count.threshold=1000
+#debezium.sink.pubsub.batch.request.byte.threshold=10000000
+
+# PubSub Retry Configuration
+debezium.sink.pubsub.retry.total.timeout.ms=1800000
+debezium.sink.pubsub.retry.max.rpc.timeout.ms=1800000
+debezium.sink.pubsub.retry.initial.delay.ms=480000
+debezium.sink.pubsub.retry.delay.multiplier=1.2
+debezium.sink.pubsub.retry.max.delay.ms=99999999
+debezium.sink.pubsub.retry.initial.rpc.timeout.ms=240000
+debezium.sink.pubsub.retry.rpc.timeout.multiplier=1.2
+debezium.sink.pubsub.wait.message.delivery.timeout.ms=99999999
+
+# =============================================================================
+# Performance and Storage Configuration
+# =============================================================================
+debezium.source.max.batch.size=10000
+debezium.source.max.queue.size=50000
+debezium.source.snapshot.fetch.size=10000
+debezium.source.poll.interval.ms=1000
+
+# Storage for offsets and schema history
+debezium.source.offset.storage.file.filename=data/offsets.dat
+debezium.source.schema.history.internal=io.debezium.storage.file.history.FileSchemaHistory
+debezium.source.schema.history.internal.file.filename=data/schema_history
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+quarkus.log.level=INFO
+quarkus.log.min-level=INFO
+
+# =============================================================================
+# Optional: Snapshot Configuration
+# =============================================================================
+#debezium.source.snapshot.mode=no_data
