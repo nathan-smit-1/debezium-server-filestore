@@ -36,6 +36,13 @@ public class GzipJsonWriter implements RecordWriter {
     private FileOutputStream fileOut;
     private Deflater deflater;
     private volatile boolean closed = false;
+    
+    // Track flush mode to avoid log spam
+    private String currentFlushMode = "normal";
+    private long lastModeTransitionTime = 0;
+    private long lastFlushStartTime = 0;
+    private long lastFlushDuration = 0;
+    private final long SLOW_FLUSH_THRESHOLD_MS = 1000; // Consider flush slow if > 1 second
 
     public GzipJsonWriter(Path filePath, String nullHandling, int batchSize) {
         this.filePath = filePath;
@@ -53,7 +60,7 @@ public class GzipJsonWriter implements RecordWriter {
         this.recordBuffer = new java.util.ArrayList<>(batchSize);
     }
 
-    @Override
+        @Override
     public void writeRecord(ChangeEvent<Object, Object> record) throws IOException {
         synchronized (lock) {
             if (closed) {
@@ -68,7 +75,75 @@ public class GzipJsonWriter implements RecordWriter {
             String json = value == null ? "null" : value.toString();
             recordBuffer.add(json);
 
-            if (recordBuffer.size() >= batchSize) {
+            // Check memory pressure and flush aggressively if needed
+            Runtime runtime = Runtime.getRuntime();
+            long totalMemory = runtime.totalMemory();
+            long freeMemory = runtime.freeMemory();
+            long usedMemory = totalMemory - freeMemory;
+            double memoryUsagePercent = (double) usedMemory / totalMemory * 100;
+
+            // Determine optimal flush strategy based on memory pressure and I/O performance
+            boolean shouldFlush = false;
+            String newFlushMode;
+            boolean isSlowIO = lastFlushDuration > SLOW_FLUSH_THRESHOLD_MS;
+            
+            if (memoryUsagePercent > 95) {
+                // Emergency - always flush immediately regardless of I/O performance
+                shouldFlush = recordBuffer.size() > 0;
+                newFlushMode = "emergency";
+            } else if (memoryUsagePercent > 90) {
+                if (isSlowIO) {
+                    // If I/O is slow and memory is high, try larger batches to improve throughput
+                    shouldFlush = recordBuffer.size() >= Math.max(batchSize, batchSize * 2);
+                    newFlushMode = "aggressive-large";
+                } else {
+                    // I/O is fast, use smaller batches to reduce memory
+                    shouldFlush = recordBuffer.size() >= Math.max(1, batchSize / 4);
+                    newFlushMode = "aggressive-small";
+                }
+            } else if (memoryUsagePercent > 80) {
+                if (isSlowIO) {
+                    // Use normal batch size when I/O is slow to balance memory and throughput
+                    shouldFlush = recordBuffer.size() >= batchSize;
+                    newFlushMode = "early-normal";
+                } else {
+                    // I/O is fast, use smaller batches
+                    shouldFlush = recordBuffer.size() >= Math.max(1, batchSize / 2);
+                    newFlushMode = "early-small";
+                }
+            } else {
+                // Normal flushing
+                shouldFlush = recordBuffer.size() >= batchSize;
+                newFlushMode = "normal";
+            }
+
+            // Log only for emergency mode and when returning to normal
+            if (!newFlushMode.equals(currentFlushMode)) {
+                long currentTime = System.currentTimeMillis();
+                if (currentTime - lastModeTransitionTime > 5000) { // Throttle mode change logs to once per 5 seconds
+                    if ("normal".equals(newFlushMode)) {
+                        LOGGER.debug("Memory pressure relieved ({}%), returning to normal batch flushing (batch size: {})", 
+                                   Math.round(memoryUsagePercent), batchSize);
+                        currentFlushMode = newFlushMode;
+                        lastModeTransitionTime = currentTime;
+                    } else if ("emergency".equals(newFlushMode)) {
+                        LOGGER.warn("Critical memory pressure detected ({}%), switching to emergency flushing mode (any records)", 
+                                   Math.round(memoryUsagePercent));
+                        currentFlushMode = newFlushMode;
+                        lastModeTransitionTime = currentTime;
+                    } else if (newFlushMode.contains("large") && !currentFlushMode.contains("large")) {
+                        LOGGER.debug("I/O performance optimization: switching to larger batches (2x) due to slow I/O (last flush: {}ms)", 
+                                   lastFlushDuration);
+                        currentFlushMode = newFlushMode;
+                        lastModeTransitionTime = currentTime;
+                    } else {
+                        // For other modes, just update tracking without logging
+                        currentFlushMode = newFlushMode;
+                    }
+                }
+            }
+
+            if (shouldFlush) {
                 flushBuffer();
             }
         }
@@ -87,6 +162,9 @@ public class GzipJsonWriter implements RecordWriter {
         }
 
         LOGGER.debug("Flushing {} records to {}", recordBuffer.size(), filePath);
+        
+        // Track flush timing for adaptive batching
+        lastFlushStartTime = System.currentTimeMillis();
 
         // Ensure deflater is initialized
         if (deflater == null) {
@@ -165,6 +243,20 @@ public class GzipJsonWriter implements RecordWriter {
         }
 
         recordBuffer.clear();
+        
+        // Track flush duration for adaptive batching
+        lastFlushDuration = System.currentTimeMillis() - lastFlushStartTime;
+        
+        // Suggest GC if we just freed up memory under pressure
+        Runtime runtime = Runtime.getRuntime();
+        long totalMemory = runtime.totalMemory();
+        long freeMemory = runtime.freeMemory();
+        double memoryUsagePercent = (double) (totalMemory - freeMemory) / totalMemory * 100;
+        
+        if (memoryUsagePercent > 90) {
+            LOGGER.debug("High memory usage after flush ({}%), suggesting GC", Math.round(memoryUsagePercent));
+            System.gc(); // Suggest garbage collection when under memory pressure
+        }
     }
 
     @Override

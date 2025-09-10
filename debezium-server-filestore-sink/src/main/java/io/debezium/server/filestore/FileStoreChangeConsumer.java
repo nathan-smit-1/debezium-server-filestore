@@ -159,6 +159,7 @@ public class FileStoreChangeConsumer extends BaseChangeConsumer implements Debez
                 String destination = record.destination();
                 if (destination == null) {
                     LOGGER.warn("Skipping record with null destination");
+                    committer.markProcessed(record);
                     continue;
                 }
 
