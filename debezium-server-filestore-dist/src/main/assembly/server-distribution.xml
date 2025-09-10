@@ -12,12 +12,42 @@
     <includeBaseDirectory>false</includeBaseDirectory>
 
     <dependencySets>
+        <!-- Main dependencies -->
         <dependencySet>
-            <outputDirectory>${project.parent.artifactId}</outputDirectory>
+            <outputDirectory>${project.parent.artifactId}/lib</outputDirectory>
             <useProjectArtifact>false</useProjectArtifact>
             <unpack>false</unpack>
             <scope>runtime</scope>
             <useTransitiveFiltering>true</useTransitiveFiltering>
+            <excludes>
+                <exclude>*:*:*:*:test</exclude>
+                <exclude>org.apache.kafka:kafka-tools:*</exclude>
+                <exclude>javax.ws.rs:javax.ws.rs-api:*</exclude>
+                <exclude>org.apache.kafka:connect-file:*</exclude>
+                <exclude>org.glassfish.jersey.*:*:*</exclude>
+                <exclude>org.apache.maven:*:*</exclude>
+                <exclude>log4j:log4j:*</exclude>
+                <exclude>ch.qos.reload4j:reload4j</exclude>
+                <exclude>io.prometheus.jmx:jmx_prometheus_javaagent:*</exclude>
+            </excludes>
+        </dependencySet>
+        
+        <!-- Additional required dependencies that get filtered out -->
+        <dependencySet>
+            <outputDirectory>${project.parent.artifactId}/lib</outputDirectory>
+            <useProjectArtifact>false</useProjectArtifact>
+            <unpack>false</unpack>
+            <scope>runtime</scope>
+            <useTransitiveFiltering>true</useTransitiveFiltering>
+            <includes>
+                <include>jakarta.ws.rs:*:*</include>
+                <include>jakarta.annotation:*:*</include>
+                <include>jakarta.xml.bind:*:*</include>
+                <include>jakarta.activation:*:*</include>
+                <include>jakarta.validation:*:*</include>
+                <include>org.yaml:snakeyaml:*:*</include>
+                <include>org.apache.kafka:connect-api:*:*</include>
+            </includes>
         </dependencySet>
     </dependencySets>
 
@@ -28,6 +58,20 @@
             <includes>
                 <include>README*</include>
                 <include>LICENSE*</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <directory>${project.build.directory}</directory>
+            <outputDirectory>${project.parent.artifactId}</outputDirectory>
+            <includes>
+                <include>*-runner.jar</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <directory>src/main/resources/distro</directory>
+            <outputDirectory>${project.parent.artifactId}</outputDirectory>
+            <includes>
+                <include>**/*</include>
             </includes>
         </fileSet>
     </fileSets>

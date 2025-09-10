@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -52,11 +53,11 @@ public class FileStoreChangeConsumer extends BaseChangeConsumer implements Debez
     @ConfigProperty(name = PROP_PREFIX + "directory", defaultValue = "data")
     String directory;
 
-    @ConfigProperty(name = PROP_PREFIX + "header.filter.name", defaultValue = "")
-    String headerFilterName;
+    @ConfigProperty(name = PROP_PREFIX + "header.filter.name")
+    Optional<String> headerFilterName;
 
-    @ConfigProperty(name = PROP_PREFIX + "header.filter.value", defaultValue = "")
-    String headerFilterValue;
+    @ConfigProperty(name = PROP_PREFIX + "header.filter.value")
+    Optional<String> headerFilterValue;
 
     @ConfigProperty(name = PROP_PREFIX + "batch.size", defaultValue = "1000")
     int batchSize;
@@ -67,8 +68,8 @@ public class FileStoreChangeConsumer extends BaseChangeConsumer implements Debez
     @ConfigProperty(name = PROP_PREFIX + "writer.buffer.bytes", defaultValue = "262144")
     int writerBufferBytes;
 
-    @ConfigProperty(name = PROP_PREFIX + "pass.through.sink", defaultValue = "")
-    String passThroughSinkName;
+    @ConfigProperty(name = PROP_PREFIX + "pass.through.sink")
+    Optional<String> passThroughSinkName;
 
     @Inject
     Instance<DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>>> allChangeConsumers;
@@ -112,18 +113,19 @@ public class FileStoreChangeConsumer extends BaseChangeConsumer implements Debez
         try {
             baseDir = Paths.get(directory);
             Files.createDirectories(baseDir);
-            boolean configuredFilter = !headerFilterName.isEmpty() && !headerFilterValue.isEmpty();
+            boolean configuredFilter = headerFilterName.isPresent() && !headerFilterName.get().isEmpty() &&
+                                     headerFilterValue.isPresent() && !headerFilterValue.get().isEmpty();
 
             // Resolve a pass-through consumer if configured
-            if (!passThroughSinkName.isEmpty()) {
+            if (passThroughSinkName.isPresent() && !passThroughSinkName.get().isEmpty()) {
                 Instance<DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>>> selected = allChangeConsumers
-                        .select(NamedLiteral.of(passThroughSinkName));
+                        .select(NamedLiteral.of(passThroughSinkName.get()));
                 if (selected.isResolvable()) {
                     passThroughConsumer = selected.get();
-                    LOGGER.info("Initialized pass-through consumer by name: '{}'", passThroughSinkName);
+                    LOGGER.info("Initialized pass-through consumer by name: '{}'", passThroughSinkName.get());
                 }
                 else {
-                    LOGGER.warn("Pass-through sink '{}' not found; pass-through disabled", passThroughSinkName);
+                    LOGGER.warn("Pass-through sink '{}' not found; pass-through disabled", passThroughSinkName.get());
                 }
             }
 
@@ -131,7 +133,7 @@ public class FileStoreChangeConsumer extends BaseChangeConsumer implements Debez
             // Otherwise, disable the filter and write all records to files.
             if (configuredFilter && passThroughConsumer == null) {
                 LOGGER.warn("Header filter configured (name='{}', value='{}') but no pass-through sink configured; disabling filter and writing all records to files.",
-                        headerFilterName, headerFilterValue);
+                        headerFilterName.orElse(""), headerFilterValue.orElse(""));
                 filterEnabled = false;
             }
             else {
@@ -139,7 +141,7 @@ public class FileStoreChangeConsumer extends BaseChangeConsumer implements Debez
             }
 
         LOGGER.info("Using configuration: null.handling='{}', directory='{}', filter.enabled='{}', filter.name='{}', filter.value='{}', pass.through.sink='{}', writer.buffer.bytes={}",
-            nullHandling, directory, filterEnabled, headerFilterName, headerFilterValue, passThroughSinkName, writerBufferBytes);
+            nullHandling, directory, filterEnabled, headerFilterName.orElse(""), headerFilterValue.orElse(""), passThroughSinkName.orElse(""), writerBufferBytes);
         }
         catch (IOException e) {
             throw new DebeziumException("Unable to create directory " + directory, e);
@@ -166,15 +168,15 @@ public class FileStoreChangeConsumer extends BaseChangeConsumer implements Debez
                     String actualValue = null;
                     if (record.headers() != null) {
                         for (Header<?> header : record.headers()) {
-                            if (headerFilterName.equals(header.getKey())) {
+                            if (headerFilterName.isPresent() && headerFilterName.get().equals(header.getKey())) {
                                 actualValue = extractHeaderValue(header);
                                 break;
                             }
                         }
                     }
-                    shouldWriteToDisk = headerFilterValue.equals(actualValue);
+                    shouldWriteToDisk = headerFilterValue.isPresent() && headerFilterValue.get().equals(actualValue);
                     LOGGER.debug("Filter check - header: {}, expected: {}, actual value: {}, matches: {}",
-                            headerFilterName, headerFilterValue, actualValue, shouldWriteToDisk);
+                            headerFilterName.orElse(""), headerFilterValue.orElse(""), actualValue, shouldWriteToDisk);
                 }
                 else {
                     shouldWriteToDisk = true;
@@ -210,7 +212,7 @@ public class FileStoreChangeConsumer extends BaseChangeConsumer implements Debez
                 }
 
                 LOGGER.debug("Forwarding {} record(s) to pass-through sink '{}'", forwarded.size(),
-                        passThroughSinkName.isEmpty() ? "<unspecified>" : passThroughSinkName);
+                        passThroughSinkName.map(s -> s.isEmpty() ? "<unspecified>" : s).orElse("<unspecified>"));
                 passThroughConsumer.handleBatch(forwarded, committer);
                 return;
             }

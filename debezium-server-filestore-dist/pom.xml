@@ -18,31 +18,16 @@
     </properties>
 
     <dependencies>
-        <!-- Core -->
+        <!-- Core - scope test like official debezium-server -->
         <dependency>
             <groupId>io.debezium</groupId>
             <artifactId>debezium-server-core</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <!-- Our Sink -->
-        <dependency>
-            <groupId>io.debezium</groupId>
-            <artifactId>debezium-server-filestore-sink</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        
-        <!-- JMX Prometheus Agent for metrics -->
-        <dependency>
-            <groupId>io.prometheus.jmx</groupId>
-            <artifactId>jmx_prometheus_javaagent</artifactId>
-        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Quarkus plugin temporarily disabled due to version incompatibility -->
-            <!--
             <plugin>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
@@ -61,7 +46,6 @@
                     </execution>
                 </executions>
             </plugin>
-            -->
         </plugins>
     </build>
 
@@ -121,6 +105,18 @@
                     <groupId>io.debezium</groupId>
                     <artifactId>debezium-server-core</artifactId>
                     <version>${debezium.version}</version>
+                </dependency>
+                <!-- Critical: debezium-embedded brings in Kafka Connect API -->
+                <dependency>
+                    <groupId>io.debezium</groupId>
+                    <artifactId>debezium-embedded</artifactId>
+                    <version>${debezium.version}</version>
+                </dependency>
+                <!-- Our FileStore Sink -->
+                <dependency>
+                    <groupId>io.debezium</groupId>
+                    <artifactId>debezium-server-filestore-sink</artifactId>
+                    <version>${project.version}</version>
                 </dependency>
                 <dependency>
                     <groupId>io.debezium</groupId>

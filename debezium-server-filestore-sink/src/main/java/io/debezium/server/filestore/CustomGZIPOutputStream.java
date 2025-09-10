@@ -7,7 +7,7 @@ package io.debezium.server.filestore;
 
 import java.io.IOException;
 import java.util.zip.Deflater;
-import java.util.zip.GZIPOutputStream;
+import java.util.zip.DeflaterOutputStream;
 import java.io.OutputStream;
 import java.util.zip.CRC32;
 
@@ -15,14 +15,15 @@ import java.util.zip.CRC32;
  * Custom implementation of GZIPOutputStream that allows reuse of Deflater
  * to avoid allocation overhead.
  */
-public class CustomGZIPOutputStream extends GZIPOutputStream {
+public class CustomGZIPOutputStream extends DeflaterOutputStream {
     private static final int GZIP_MAGIC = 0x8b1f;
     private final CRC32 crc = new CRC32();
     private boolean headerWritten = false;
     private final byte[] header = new byte[10];
+    protected byte[] buf = new byte[512];
 
     public CustomGZIPOutputStream(OutputStream out, Deflater deflater) throws IOException {
-        super(out);
+        super(out, deflater, 512, false); // Don't sync flush
         this.def = deflater;
     }
 

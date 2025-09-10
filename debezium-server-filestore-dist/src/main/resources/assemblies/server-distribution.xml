@@ -18,7 +18,6 @@
           <excludes>
             <exclude>org.apache.kafka:kafka-tools:*</exclude>
             <exclude>javax.ws.rs:javax.ws.rs-api:*</exclude>
-            <exclude>org.apache.kafka:connect-file:*</exclude>
             <exclude>org.glassfish.jersey.*:*:*</exclude>
             <exclude>org.apache.maven:*:*</exclude>
             <exclude>log4j:log4j:*</exclude>
@@ -49,7 +48,26 @@
               incorrectly removed by transitive dependency filtering added for
               debezium-connector-dse exclusion.
               -->
+              <!--
+              Explicitly include snakeyaml, required for quarkus-config-yaml. It is being
+              incorrectly removed by transitive dependency filtering added for
+              debezium-connector-dse exclusion.
+              -->
               <include>org.yaml:snakeyaml:*:*</include>
+              <!--
+              Explicitly include SLF4J API, required for logging in Quarkus runner.
+              May be incorrectly removed by transitive dependency filtering.
+              -->
+              <include>org.slf4j:slf4j-api:*:*</include>
+              <!--
+              Explicitly include Reactive Streams API, required for RESTEasy reactive providers.
+              May be incorrectly removed by transitive dependency filtering.
+              -->
+              <include>org.reactivestreams:reactive-streams:*:*</include>
+              <!--
+              Explicitly include Kafka Connect API, required for ConnectException and other Connect classes.
+              -->
+              <include>org.apache.kafka:connect-api:*:*</include>
           </includes>
       </dependencySet>
       <dependencySet>
@@ -128,7 +146,6 @@
       </includes>
       <useDefaultExcludes>true</useDefaultExcludes>
     </fileSet>
-    <!--
     <fileSet>
       <directory>${project.build.directory}</directory>
       <outputDirectory>debezium-server</outputDirectory>
@@ -136,13 +153,23 @@
         <include>*-runner.jar</include>
       </includes>
     </fileSet>
-    -->
     <fileSet>
       <directory>src/main/resources/distro</directory>
       <outputDirectory>debezium-server</outputDirectory>
       <includes>
         <include>**/*</include>
       </includes>
+      <excludes>
+        <exclude>**/*.sh</exclude>
+      </excludes>
+    </fileSet>
+    <fileSet>
+      <directory>src/main/resources/distro</directory>
+      <outputDirectory>debezium-server</outputDirectory>
+      <includes>
+        <include>**/*.sh</include>
+      </includes>
+      <fileMode>0755</fileMode>
     </fileSet>
   </fileSets>
 </assembly>

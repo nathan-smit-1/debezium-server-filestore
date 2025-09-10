@@ -26,15 +26,16 @@ import io.debezium.engine.ChangeEvent;
  */
 public class GzipJsonWriter implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(GzipJsonWriter.class);
-    private static final ThreadLocal<Deflater> DEFLATER = ThreadLocal.withInitial(() -> new Deflater(Deflater.DEFAULT_COMPRESSION, true));
 
     private final Path filePath;
     private final String nullHandling;
     private final int batchSize;
     private final int writerBufferBytes;
     private final List<Object> recordBuffer;
+    private final Object lock = new Object();
     private FileOutputStream fileOut;
-    private boolean closed = false;
+    private Deflater deflater;
+    private volatile boolean closed = false;
 
     public GzipJsonWriter(Path filePath, String nullHandling, int batchSize) {
         this.filePath = filePath;
@@ -54,41 +55,64 @@ public class GzipJsonWriter implements RecordWriter {
 
     @Override
     public void writeRecord(ChangeEvent<Object, Object> record) throws IOException {
-        if (closed) {
-            throw new IOException("Writer is closed");
-        }
+        synchronized (lock) {
+            if (closed) {
+                throw new IOException("Writer is closed");
+            }
 
-        if (record.value() == null && !"write".equals(nullHandling)) {
-            return;
-        }
+            if (record.value() == null && !"write".equals(nullHandling)) {
+                return;
+            }
 
-        Object value = record.value();
-        String json = value == null ? "null" : value.toString();
-        recordBuffer.add(json);
+            Object value = record.value();
+            String json = value == null ? "null" : value.toString();
+            recordBuffer.add(json);
 
-        if (recordBuffer.size() >= batchSize) {
-            flushBuffer();
+            if (recordBuffer.size() >= batchSize) {
+                flushBuffer();
+            }
         }
     }
 
     @Override
     public void flush() throws IOException {
-        flushBuffer();
+        synchronized (lock) {
+            flushBuffer();
+        }
     }
 
     private void flushBuffer() throws IOException {
-        if (recordBuffer.isEmpty() || fileOut == null) {
+        if (recordBuffer.isEmpty() || fileOut == null || closed) {
             return;
         }
 
         LOGGER.debug("Flushing {} records to {}", recordBuffer.size(), filePath);
 
-        Deflater deflater = DEFLATER.get();
-        deflater.reset();
+        // Ensure deflater is initialized
+        if (deflater == null) {
+            deflater = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
+        }
+        
+        try {
+            deflater.reset();
+        } catch (Exception e) {
+            LOGGER.warn("Deflater was closed, creating new one: {}", e.getMessage());
+            deflater = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
+            deflater.reset();
+        }
 
-        try (BufferedOutputStream bufferedOut = new BufferedOutputStream(fileOut, Math.max(8 * 1024, writerBufferBytes));
-             CustomGZIPOutputStream gzipOut = new CustomGZIPOutputStream(bufferedOut, deflater);
-             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(gzipOut, StandardCharsets.UTF_8), Math.max(8 * 1024, writerBufferBytes))) {
+        // Manual resource management to avoid closing the underlying fileOut stream
+        BufferedOutputStream bufferedOut = null;
+        CustomGZIPOutputStream gzipOut = null;
+        OutputStreamWriter osw = null;
+        BufferedWriter writer = null;
+        boolean success = false;
+        
+        try {
+            bufferedOut = new BufferedOutputStream(fileOut, Math.max(8 * 1024, writerBufferBytes));
+            gzipOut = new CustomGZIPOutputStream(bufferedOut, deflater);
+            osw = new OutputStreamWriter(gzipOut, StandardCharsets.UTF_8);
+            writer = new BufferedWriter(osw, Math.max(8 * 1024, writerBufferBytes));
 
             for (Object record : recordBuffer) {
                 if (record instanceof String) {
@@ -101,7 +125,43 @@ public class GzipJsonWriter implements RecordWriter {
                 writer.write('\n');
             }
             writer.flush();
-            gzipOut.finish();
+            gzipOut.finish(); // Mark as successful only after finish() completes
+            success = true;
+            
+        } finally {
+            // Ensure proper GZIP completion to avoid corruption
+            if (gzipOut != null && !success) {
+                try {
+                    // If we didn't succeed, try to finish the GZIP stream anyway to avoid corruption
+                    gzipOut.finish();
+                } catch (Exception e) {
+                    LOGGER.warn("Error finishing GZIP stream after failure: {}", e.getMessage());
+                }
+            }
+            
+            // Close streams in reverse order, but don't close the underlying fileOut
+            if (writer != null) {
+                try {
+                    writer.flush();
+                } catch (Exception e) {
+                    LOGGER.debug("Error flushing writer: {}", e.getMessage());
+                }
+            }
+            if (gzipOut != null) {
+                try {
+                    gzipOut.flush();
+                } catch (Exception e) {
+                    LOGGER.debug("Error flushing gzip stream: {}", e.getMessage());
+                }
+            }
+            if (bufferedOut != null) {
+                try {
+                    bufferedOut.flush();
+                } catch (Exception e) {
+                    LOGGER.debug("Error flushing buffered stream: {}", e.getMessage());
+                }
+            }
+            // Note: We intentionally do NOT close fileOut here, as it needs to remain open
         }
 
         recordBuffer.clear();
@@ -119,20 +179,37 @@ public class GzipJsonWriter implements RecordWriter {
 
     @Override
     public void close() throws Exception {
-        if (!closed) {
-            try {
-                flushBuffer(); // Ensure any remaining records are written
-            }
-            finally {
-                closed = true;
-                if (fileOut != null) {
-                    fileOut.close();
-                    fileOut = null;
+        synchronized (lock) {
+            if (!closed) {
+                closed = true; // Set closed first to prevent other operations
+                try {
+                    flushBuffer(); // Ensure any remaining records are written
                 }
-                Deflater deflater = DEFLATER.get();
-                if (deflater != null) {
-                    deflater.end();
-                    DEFLATER.remove();
+                catch (Exception e) {
+                    LOGGER.warn("Error flushing buffer during close: {}", e.getMessage());
+                }
+                finally {
+                    if (fileOut != null) {
+                        try {
+                            fileOut.close();
+                        }
+                        finally {
+                            fileOut = null;
+                        }
+                    }
+                    
+                    // Clean up deflater
+                    if (deflater != null) {
+                        try {
+                            deflater.end();
+                        }
+                        catch (Exception e) {
+                            LOGGER.debug("Error ending deflater: {}", e.getMessage());
+                        }
+                        finally {
+                            deflater = null;
+                        }
+                    }
                 }
             }
         }
