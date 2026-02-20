@@ -68,6 +68,11 @@
               Explicitly include Kafka Connect API, required for ConnectException and other Connect classes.
               -->
               <include>org.apache.kafka:connect-api:*:*</include>
+              <!--
+              Explicitly include Maven Artifact, required for Debezium Server.
+              May be incorrectly removed by transitive dependency filtering.
+              -->
+              <include>org.apache.maven:maven-artifact:*:*</include>
           </includes>
       </dependencySet>
       <dependencySet>

@@ -12,10 +12,10 @@
     <description>Debezium Server distribution with FileStore sink support</description>
 
     <properties>
-        <revision>3.2.1.Final</revision>
-        <debezium.version>3.2.1.Final</debezium.version>
-        <quarkus.version>3.15.4</quarkus.version>
-        <quarkus.version.runtime>3.15.4</quarkus.version.runtime>
+        <revision>3.5.0.Alpha1</revision>
+        <debezium.version>3.5.0.Alpha1</debezium.version>
+        <quarkus.version>3.27.1</quarkus.version>
+        <quarkus.version.runtime>3.27.1</quarkus.version.runtime>
         <compiler.plugin.version>3.11.0</compiler.plugin.version>
         <version.assembly.plugin>3.5.0</version.assembly.plugin>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
